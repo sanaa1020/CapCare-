@@ -1,5 +1,6 @@
 const express = require("express");
 const db = require("../db");
+const wrap = require("../middleware/asyncHandler");
 const { requireAuth } = require("../middleware/auth");
 
 const router = express.Router();
@@ -10,13 +11,13 @@ function row(r) {
 }
 
 // GET /api/notes
-router.get("/", (req, res) => {
-  const rows = db.prepare("SELECT * FROM notes WHERE user_id = ? ORDER BY id DESC").all(req.userId);
+router.get("/", wrap(async (req, res) => {
+  const rows = await db.all("SELECT * FROM notes WHERE user_id = ? ORDER BY id DESC", [req.userId]);
   res.json({ entries: rows.map(row) });
-});
+}));
 
 // POST /api/notes { text, ts }
-router.post("/", (req, res) => {
+router.post("/", wrap(async (req, res) => {
   const { text, ts } = req.body || {};
   if (!text || !String(text).trim()) return res.status(400).json({ error: "Note text required" });
 
@@ -30,18 +31,20 @@ router.post("/", (req, res) => {
       minute: "2-digit",
     });
 
-  const info = db
-    .prepare("INSERT INTO notes (user_id, body, display_ts) VALUES (?, ?, ?)")
-    .run(req.userId, String(text).trim(), displayTs);
+  const info = await db.run("INSERT INTO notes (user_id, body, display_ts) VALUES (?, ?, ?)", [
+    req.userId,
+    String(text).trim(),
+    displayTs,
+  ]);
 
-  const created = db.prepare("SELECT * FROM notes WHERE id = ?").get(info.lastInsertRowid);
+  const created = await db.get("SELECT * FROM notes WHERE id = ?", [info.lastInsertRowid]);
   res.status(201).json({ entry: row(created) });
-});
+}));
 
 // DELETE /api/notes/:id
-router.delete("/:id", (req, res) => {
-  db.prepare("DELETE FROM notes WHERE id = ? AND user_id = ?").run(req.params.id, req.userId);
+router.delete("/:id", wrap(async (req, res) => {
+  await db.run("DELETE FROM notes WHERE id = ? AND user_id = ?", [req.params.id, req.userId]);
   res.json({ ok: true });
-});
+}));
 
 module.exports = router;

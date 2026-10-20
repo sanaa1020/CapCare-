@@ -1,24 +1,27 @@
-// db.js: SQLite initialization. Creates all tables on first run.
+// db.js: database access via libSQL (Turso).
 //
-// Uses Node's built-in `node:sqlite` (DatabaseSync) rather than better-sqlite3:
-// this sandbox's network policy blocks the prebuilt-binary/node-gyp downloads
-// better-sqlite3 needs to compile its native addon, while node:sqlite ships
-// inside the Node binary itself (stable/experimental since Node 22) and needs
-// no native build step at all. The API (prepare/run/get/all) is effectively
-// the same, so nothing above this module needs to change.
+// Production / Vercel: set TURSO_DATABASE_URL (libsql://<db>-<org>.turso.io) and
+// TURSO_AUTH_TOKEN (a *database* token, `turso db tokens create <db>`).
+// Local dev: if TURSO_DATABASE_URL is unset, falls back to a local SQLite file at
+// server/data/capcare.db, so `npm start` keeps working with zero setup.
+//
+// The libSQL client is async (the old node:sqlite one was synchronous), so every
+// helper below returns a Promise. Tables are created lazily via init(), which is
+// awaited by a middleware in index.js before any request is handled.
 const path = require("path");
 const fs = require("fs");
-const { DatabaseSync } = require("node:sqlite");
+const { createClient } = require("@libsql/client");
 
-const DATA_DIR = path.join(__dirname, "data");
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+let url = process.env.TURSO_DATABASE_URL;
+if (!url) {
+  const dataDir = path.join(__dirname, "data");
+  if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+  url = "file:" + path.join(dataDir, "capcare.db");
+}
 
-const DB_PATH = path.join(DATA_DIR, "capcare.db");
-const db = new DatabaseSync(DB_PATH);
-db.exec("PRAGMA journal_mode = WAL");
-db.exec("PRAGMA foreign_keys = ON");
+const client = createClient({ url, authToken: process.env.TURSO_AUTH_TOKEN });
 
-db.exec(`
+const SCHEMA = `
   CREATE TABLE IF NOT EXISTS users (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     username      TEXT UNIQUE NOT NULL,
@@ -108,6 +111,44 @@ db.exec(`
     source_type  TEXT PRIMARY KEY,
     fetched_at   TEXT NOT NULL
   );
-`);
+`;
 
-module.exports = db;
+let ready;
+function init() {
+  if (!ready) {
+    ready = client.executeMultiple(SCHEMA).catch((err) => {
+      ready = undefined; // allow a retry on the next request
+      throw err;
+    });
+  }
+  return ready;
+}
+
+// Plain-object rows so JSON.parse / property access behave like before.
+const toObj = (row) => (row ? { ...row } : undefined);
+
+async function all(sql, args = []) {
+  const r = await client.execute({ sql, args });
+  return r.rows.map(toObj);
+}
+
+async function get(sql, args = []) {
+  const rows = await all(sql, args);
+  return rows[0];
+}
+
+// Returns { changes, lastInsertRowid } like node:sqlite's run().
+async function run(sql, args = []) {
+  const r = await client.execute({ sql, args });
+  return {
+    changes: r.rowsAffected,
+    lastInsertRowid: r.lastInsertRowid != null ? Number(r.lastInsertRowid) : undefined,
+  };
+}
+
+// Run several statements atomically: batch([{ sql, args }, ...]).
+function batch(statements) {
+  return client.batch(statements, "write");
+}
+
+module.exports = { client, init, all, get, run, batch };

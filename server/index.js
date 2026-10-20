@@ -7,7 +7,7 @@ const cors = require("cors");
 // doesn't exist yet. Requires Node 20.6+ (this project targets 22.5+).
 try { process.loadEnvFile(path.join(__dirname, ".env")); } catch { /* no .env yet, that's fine */ }
 
-require("./db"); // ensure tables exist before anything else touches them
+const { init: initDb } = require("./db"); // creates tables on first use (see middleware below)
 
 const authRoutes = require("./routes/auth");
 const profileRoutes = require("./routes/profile");
@@ -22,6 +22,19 @@ const PORT = process.env.PORT || 4000;
 
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
+
+// Make sure the schema exists before any request touches the DB. init() is
+// memoized, so this is a no-op after the first request of each instance
+// (important on serverless, where there is no long-lived "startup" phase).
+app.use("/api", async (req, res, next) => {
+  try {
+    await initDb();
+    next();
+  } catch (err) {
+    console.error("Database init failed:", err);
+    res.status(503).json({ error: "Database unavailable" });
+  }
+});
 
 app.get("/api/health", (req, res) => res.json({ ok: true, service: "capcare-server" }));
 
@@ -51,6 +64,20 @@ if (fs.existsSync(CLIENT_DIST)) {
   });
 }
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`CapCare+ server listening on http://0.0.0.0:${PORT}`);
+// Last-resort error handler: async route errors land here via middleware/asyncHandler.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  console.error("Unhandled error:", err);
+  if (res.headersSent) return next(err);
+  res.status(500).json({ error: "Unexpected server error" });
 });
+
+// Vercel imports this file and calls the exported app per request; locally we
+// start a normal HTTP server.
+if (!process.env.VERCEL) {
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`CapCare+ server listening on http://0.0.0.0:${PORT}`);
+  });
+}
+
+module.exports = app;

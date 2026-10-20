@@ -18,8 +18,8 @@ const { scoreArticleForAllergens } = require("../services/relevance");
 const router = express.Router();
 router.use(requireAuth);
 
-function getUserAllergens(userId) {
-  const user = db.prepare("SELECT allergens FROM users WHERE id = ?").get(userId);
+async function getUserAllergens(userId) {
+  const user = await db.get("SELECT allergens FROM users WHERE id = ?", [userId]);
   return JSON.parse(user?.allergens || "[]").filter(a => a !== "none");
 }
 
@@ -27,7 +27,7 @@ function getUserAllergens(userId) {
 router.get("/", async (req, res) => {
   try {
     const articles = await getFreshOrFetch("news", fetchRankedNews);
-    const allergens = getUserAllergens(req.userId);
+    const allergens = await getUserAllergens(req.userId);
 
     const scored = articles.map(a => {
       const { score, matched } = scoreArticleForAllergens(a, allergens);
@@ -46,7 +46,7 @@ router.get("/", async (req, res) => {
 router.get("/recalls", async (req, res) => {
   try {
     const recalls = await getFreshOrFetch("recall", fetchFoodRecalls);
-    const allergens = getUserAllergens(req.userId);
+    const allergens = await getUserAllergens(req.userId);
     const tagged = recalls.map(r => ({ ...r, tags: scoreArticleForAllergens(r, allergens).matched }));
     res.json({ recalls: tagged.slice(0, 10) });
   } catch (err) {

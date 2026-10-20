@@ -256,7 +256,7 @@ router.get("/:code", requireAuth, async (req, res) => {
   }
 
   try {
-    const cached = db.prepare("SELECT * FROM products WHERE barcode = ?").get(barcode);
+    const cached = await db.get("SELECT * FROM products WHERE barcode = ?", [barcode]);
     let product;
 
     if (cached && Date.now() - new Date(cached.fetched_at + "Z").getTime() < CACHE_TTL_MS) {
@@ -264,10 +264,11 @@ router.get("/:code", requireAuth, async (req, res) => {
     } else {
       try {
         product = await fetchFromOpenFoodFacts(barcode);
-        db.prepare(
+        await db.run(
           `INSERT INTO products (barcode, data, fetched_at) VALUES (?, ?, datetime('now'))
-           ON CONFLICT(barcode) DO UPDATE SET data = excluded.data, fetched_at = excluded.fetched_at`
-        ).run(barcode, JSON.stringify(product));
+           ON CONFLICT(barcode) DO UPDATE SET data = excluded.data, fetched_at = excluded.fetched_at`,
+          [barcode, JSON.stringify(product)]
+        );
       } catch (err) {
         if (cached) {
           // Serve stale cache rather than fail outright if OFF is unreachable
@@ -281,7 +282,7 @@ router.get("/:code", requireAuth, async (req, res) => {
     }
 
     // Record/refresh this user's scan history (one row per user+barcode, no duplicate spam)
-    db.prepare(
+    await db.run(
       `INSERT INTO scanned_foods (user_id, barcode, product_name, brand, quantity, image_url, nutriscore, scanned_at, product_data)
        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
        ON CONFLICT(user_id, barcode) DO UPDATE SET
@@ -291,20 +292,21 @@ router.get("/:code", requireAuth, async (req, res) => {
          image_url    = excluded.image_url,
          nutriscore   = excluded.nutriscore,
          scanned_at   = excluded.scanned_at,
-         product_data = excluded.product_data`
-    ).run(
-      req.userId,
-      barcode,
-      product.name,
-      product.brand,
-      product.quantity,
-      product.image_url,
-      product.nutriscore,
-      JSON.stringify(product)
+         product_data = excluded.product_data`,
+      [
+        req.userId,
+        barcode,
+        product.name ?? null,
+        product.brand ?? null,
+        product.quantity ?? null,
+        product.image_url ?? null,
+        product.nutriscore ?? null,
+        JSON.stringify(product),
+      ]
     );
 
     // Cross-check against the user's known allergens for a quick warning flag.
-    const user = db.prepare("SELECT allergens FROM users WHERE id = ?").get(req.userId);
+    const user = await db.get("SELECT allergens FROM users WHERE id = ?", [req.userId]);
     const userAllergens = JSON.parse(user?.allergens || "[]").filter((a) => a !== "none");
     const matched = matchAllergens(product, userAllergens);
 
@@ -326,7 +328,7 @@ router.get("/:code/alternatives", requireAuth, async (req, res) => {
   }
 
   try {
-    const cached = db.prepare("SELECT * FROM products WHERE barcode = ?").get(barcode);
+    const cached = await db.get("SELECT * FROM products WHERE barcode = ?", [barcode]);
     if (!cached) {
       return res.status(404).json({ error: "Scan this product first" });
     }
@@ -339,17 +341,17 @@ router.get("/:code/alternatives", requireAuth, async (req, res) => {
     if (!(product.categories_tags || []).length) {
       try {
         const fresh = await fetchFromOpenFoodFacts(barcode);
-        db.prepare(`UPDATE products SET data = ?, fetched_at = datetime('now') WHERE barcode = ?`).run(
+        await db.run(`UPDATE products SET data = ?, fetched_at = datetime('now') WHERE barcode = ?`, [
           JSON.stringify(fresh),
-          barcode
-        );
+          barcode,
+        ]);
         product = fresh;
       } catch {
         /* OFF unreachable or product gone, fall back to deriveCategoryTag below */
       }
     }
 
-    const user = db.prepare("SELECT allergens FROM users WHERE id = ?").get(req.userId);
+    const user = await db.get("SELECT allergens FROM users WHERE id = ?", [req.userId]);
     const userAllergens = JSON.parse(user?.allergens || "[]").filter((a) => a !== "none");
     const matched = matchAllergens(product, userAllergens);
 
@@ -366,10 +368,14 @@ router.get("/:code/alternatives", requireAuth, async (req, res) => {
 });
 
 // GET /api/barcode/history/list: this user's scanned-food history
-router.get("/history/list", requireAuth, (req, res) => {
-  const rows = db
-    .prepare("SELECT * FROM scanned_foods WHERE user_id = ? ORDER BY scanned_at DESC LIMIT 50")
-    .all(req.userId);
+router.get("/history/list", requireAuth, async (req, res) => {
+  let rows;
+  try {
+    rows = await db.all("SELECT * FROM scanned_foods WHERE user_id = ? ORDER BY scanned_at DESC LIMIT 50", [req.userId]);
+  } catch (err) {
+    console.error("History lookup failed:", err);
+    return res.status(500).json({ error: "Couldn't load scan history" });
+  }
   res.json({
     entries: rows.map((r) => ({
       id: r.id,

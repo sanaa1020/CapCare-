@@ -8,15 +8,12 @@
 const path = require("path");
 const fs = require("fs");
 
-// Use a throwaway database file so this never touches real data.
+// Use a throwaway local database file so this never touches real data (or Turso).
 const TEST_DB = path.join(__dirname, "data", "test-offline.db");
-if (fs.existsSync(TEST_DB)) fs.unlinkSync(TEST_DB);
-process.env.CAPCARE_TEST_DB = TEST_DB;
-
-// Patch db.js's DB_PATH indirectly by requiring after monkey-patching DatabaseSync path:
-// simplest: just point at the same data dir, db.js always uses data/capcare.db, so instead
-// we temporarily rename any existing db out of the way is overkill. We just accept using
-// the real dev db here since this script only adds one throwaway test user + one product.
+fs.mkdirSync(path.dirname(TEST_DB), { recursive: true });
+for (const f of [TEST_DB, TEST_DB + "-wal", TEST_DB + "-shm"]) if (fs.existsSync(f)) fs.unlinkSync(f);
+process.env.TURSO_DATABASE_URL = "file:" + TEST_DB;
+delete process.env.TURSO_AUTH_TOKEN;
 
 // Stub a realistic (partial) Open Food Facts v3 response BEFORE requiring the router,
 // so the intentionally-missing fields (generic_name_en, ingredients_text) exercise the
@@ -74,20 +71,20 @@ const db = require("./db");
 const { JWT_SECRET } = require("./middleware/auth");
 const barcodeRoutes = require("./routes/barcode");
 
-// Create (or reuse) a throwaway test user with a known allergen list, so the
-// allergen cross-check has something real to match against.
-let user = db.prepare("SELECT * FROM users WHERE username = ?").get("offline_test_user");
-if (!user) {
-  db.prepare(
-    "INSERT INTO users (username, password_hash, name, allergens) VALUES (?, 'x', 'Offline Test', ?)"
-  ).run("offline_test_user", JSON.stringify(["treenuts", "dairy"]));
-  user = db.prepare("SELECT * FROM users WHERE username = ?").get("offline_test_user");
-}
-const token = jwt.sign({ uid: user.id, username: user.username }, JWT_SECRET);
-
 const app = express();
 app.use(express.json());
 app.use("/api/barcode", barcodeRoutes);
+
+(async () => {
+// Create a throwaway test user with a known allergen list, so the allergen
+// cross-check has something real to match against.
+await db.init();
+await db.run(
+  "INSERT INTO users (username, password_hash, name, allergens) VALUES (?, 'x', 'Offline Test', ?)",
+  ["offline_test_user", JSON.stringify(["treenuts", "dairy"])]
+);
+const user = await db.get("SELECT * FROM users WHERE username = ?", ["offline_test_user"]);
+const token = jwt.sign({ uid: user.id, username: user.username }, JWT_SECRET);
 
 const server = app.listen(0, async () => {
   const port = server.address().port;
@@ -120,7 +117,7 @@ const server = app.listen(0, async () => {
     body1.matchedAllergens.length > 0
   );
 
-  // Second lookup should hit the SQLite cache, not the stub fetch again.
+  // Second lookup should hit the DB cache, not the stub fetch again.
   let offFetchCalls = 0;
   const wrappedFetch = global.fetch;
   global.fetch = async (url, opts) => {
@@ -143,3 +140,4 @@ const server = app.listen(0, async () => {
   console.log(`\n${checks.length - failed.length}/${checks.length} checks passed.`);
   server.close(() => process.exit(failed.length ? 1 : 0));
 });
+})();

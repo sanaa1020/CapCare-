@@ -12,16 +12,14 @@ const TTL_MS = {
   alert: 30 * 60 * 1000,      // 30 minutes
 };
 
-function cacheAgeMs(sourceType) {
-  const row = db.prepare("SELECT fetched_at FROM news_fetch_log WHERE source_type = ?").get(sourceType);
+async function cacheAgeMs(sourceType) {
+  const row = await db.get("SELECT fetched_at FROM news_fetch_log WHERE source_type = ?", [sourceType]);
   if (!row) return Infinity;
   return Date.now() - new Date(row.fetched_at + "Z").getTime();
 }
 
-function readCached(sourceType) {
-  const rows = db
-    .prepare("SELECT * FROM news_articles WHERE source_type = ? ORDER BY pub_date DESC")
-    .all(sourceType);
+async function readCached(sourceType) {
+  const rows = await db.all("SELECT * FROM news_articles WHERE source_type = ? ORDER BY pub_date DESC", [sourceType]);
   return rows.map(r => ({
     id: r.id,
     source: r.source_name,
@@ -33,41 +31,45 @@ function readCached(sourceType) {
   }));
 }
 
-function writeCache(sourceType, articles) {
-  const del = db.prepare("DELETE FROM news_articles WHERE source_type = ?");
-  const insert = db.prepare(`
+async function writeCache(sourceType, articles) {
+  const insertSql = `
     INSERT INTO news_articles (id, source_type, source_name, title, link, summary, pub_date, extra, fetched_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     ON CONFLICT(id) DO UPDATE SET
       source_type = excluded.source_type, source_name = excluded.source_name,
       title = excluded.title, link = excluded.link, summary = excluded.summary,
       pub_date = excluded.pub_date, extra = excluded.extra, fetched_at = excluded.fetched_at
-  `);
-  const touch = db.prepare(`
+  `;
+  const touchSql = `
     INSERT INTO news_fetch_log (source_type, fetched_at) VALUES (?, datetime('now'))
     ON CONFLICT(source_type) DO UPDATE SET fetched_at = excluded.fetched_at
-  `);
+  `;
 
-  del.run(sourceType);
+  // One atomic round trip to Turso instead of N+2 separate requests.
+  const statements = [{ sql: "DELETE FROM news_articles WHERE source_type = ?", args: [sourceType] }];
   for (const a of articles) {
     const { id, source, title, summary, link, pubDate, ...extra } = a;
-    insert.run(id, sourceType, source || "", title, link, summary || "", pubDate || "", JSON.stringify(extra));
+    statements.push({
+      sql: insertSql,
+      args: [id, sourceType, source || "", title, link, summary || "", pubDate || "", JSON.stringify(extra)],
+    });
   }
-  touch.run(sourceType);
+  statements.push({ sql: touchSql, args: [sourceType] });
+  await db.batch(statements);
 }
 
 // Returns cached articles if still fresh; otherwise calls fetchFn(), stores
 // whatever it returns, and falls back to serving stale cache (rather than an
 // empty list) if the fetch fails or comes back empty.
 async function getFreshOrFetch(sourceType, fetchFn) {
-  if (cacheAgeMs(sourceType) < TTL_MS[sourceType]) {
-    const cached = readCached(sourceType);
+  if ((await cacheAgeMs(sourceType)) < TTL_MS[sourceType]) {
+    const cached = await readCached(sourceType);
     if (cached.length) return cached;
   }
   try {
     const fresh = await fetchFn();
     if (fresh.length) {
-      writeCache(sourceType, fresh);
+      await writeCache(sourceType, fresh);
       return fresh;
     }
   } catch (err) {

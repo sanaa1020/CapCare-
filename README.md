@@ -26,14 +26,14 @@ capcare/
 ```
 
 Every screen's data (login, profile, symptom log, personal notes, allergy scan history,
-barcode scan history) is now stored in a real SQLite database on the server
-(`server/data/capcare.db`), not just the browser's local storage. `localStorage` is still
+barcode scan history) is stored in a real SQLite-compatible database on the server, not
+just the browser's local storage. In production that's [Turso](https://turso.tech) (libSQL);
+locally it falls back to a plain SQLite file (`server/data/capcare.db`) with zero setup. `localStorage` is still
 used as a fast local cache so the UI feels instant, but the server is the source of truth.
 
 ## Prerequisites
 
-- **Node.js 22.5 or newer** (needed for the built-in `node:sqlite` module — check with
-  `node -v`; if you have an older Node, install the latest LTS from nodejs.org first).
+- **Node.js 20.6 or newer** (check with `node -v`).
 - A camera-equipped phone (or laptop) to test the barcode scanner.
 
 ## 1. Install
@@ -107,6 +107,27 @@ Once you have the app open on your phone in a `https://` context (Option A):
 - **iPhone/Safari**: tap the Share icon → "Add to Home Screen".
 
 It will use the CapCare+ mushroom icon and open full-screen like a native app.
+
+## Deploy to Vercel (with Turso)
+
+The repo's `vercel.json` deploys `client/` (Vite) and `server/` (Express) as two services,
+with `/api/*` routed to the server.
+
+1. **Create the database** (once):
+   ```
+   turso db create capcare
+   turso db show capcare --url        # -> TURSO_DATABASE_URL  (libsql://...)
+   turso db tokens create capcare     # -> TURSO_AUTH_TOKEN    (a *database* token)
+   ```
+   A Turso account-level *platform API token* will not work as `TURSO_AUTH_TOKEN`.
+2. **Set environment variables** in Vercel (Project -> Settings -> Environment Variables):
+   `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `JWT_SECRET` (e.g. `openssl rand -hex 32`;
+   the server refuses to start in production without it), and optionally `GNEWS_API_KEY`.
+3. **Deploy**: import the repo in Vercel, or run `vercel --prod`.
+
+Tables are created automatically on the first request. To copy existing local data into
+Turso: `sqlite3 server/data/capcare.db .dump > dump.sql`, remove the `BEGIN TRANSACTION;`
+/ `COMMIT;` lines, then `turso db shell capcare < dump.sql`.
 
 ## Backend overview
 

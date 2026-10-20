@@ -2,6 +2,7 @@
 // Kept separate from the real barcode+Open Food Facts history in routes/barcode.js.
 const express = require("express");
 const db = require("../db");
+const wrap = require("../middleware/asyncHandler");
 const { requireAuth } = require("../middleware/auth");
 
 const router = express.Router();
@@ -19,31 +20,29 @@ function row(r) {
 }
 
 // GET /api/scans: most recent 30
-router.get("/", (req, res) => {
-  const rows = db
-    .prepare("SELECT * FROM allergy_scans WHERE user_id = ? ORDER BY id DESC LIMIT 30")
-    .all(req.userId);
+router.get("/", wrap(async (req, res) => {
+  const rows = await db.all("SELECT * FROM allergy_scans WHERE user_id = ? ORDER BY id DESC LIMIT 30", [req.userId]);
   res.json({ entries: rows.map(row) });
-});
+}));
 
 // POST /api/scans { product, flagCount, ingredients, date, time }
-router.post("/", (req, res) => {
+router.post("/", wrap(async (req, res) => {
   const { product, flagCount, ingredients, date, time } = req.body || {};
   if (!product || !date || !time) return res.status(400).json({ error: "Missing fields" });
 
-  const info = db
-    .prepare(
-      "INSERT INTO allergy_scans (user_id, product, flag_count, ingredients, log_date, log_time) VALUES (?, ?, ?, ?, ?, ?)"
-    )
-    .run(req.userId, String(product), Number(flagCount) || 0, JSON.stringify(ingredients || []), String(date), String(time));
+  const info = await db.run(
+    "INSERT INTO allergy_scans (user_id, product, flag_count, ingredients, log_date, log_time) VALUES (?, ?, ?, ?, ?, ?)",
+    [req.userId, String(product), Number(flagCount) || 0, JSON.stringify(ingredients || []), String(date), String(time)]
+  );
 
-  db.prepare(
+  await db.run(
     `DELETE FROM allergy_scans WHERE user_id = ? AND id NOT IN
-     (SELECT id FROM allergy_scans WHERE user_id = ? ORDER BY id DESC LIMIT 30)`
-  ).run(req.userId, req.userId);
+     (SELECT id FROM allergy_scans WHERE user_id = ? ORDER BY id DESC LIMIT 30)`,
+    [req.userId, req.userId]
+  );
 
-  const created = db.prepare("SELECT * FROM allergy_scans WHERE id = ?").get(info.lastInsertRowid);
+  const created = await db.get("SELECT * FROM allergy_scans WHERE id = ?", [info.lastInsertRowid]);
   res.status(201).json({ entry: row(created) });
-});
+}));
 
 module.exports = router;
