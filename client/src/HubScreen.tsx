@@ -394,6 +394,8 @@ export default function HubScreen({ onNavigate, onSettings, initialIdx }: Props)
   const mountIdxRef  = useRef(startIdx);
   const startX       = useRef<number | null>(null);
   const draggingRef  = useRef(false);
+  const pointerIdRef = useRef<number | null>(null);
+  const capturedRef  = useRef(false);
   const dragOffRef   = useRef(0);
   const cardRefs     = useRef<(HTMLDivElement | null)[]>([null, null, null]);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -445,18 +447,28 @@ export default function HubScreen({ onNavigate, onSettings, initialIdx }: Props)
     dragOffRef.current = 0;
     draggingRef.current = true;
     if (containerRef.current) containerRef.current.style.cursor = "grabbing";
-    e.currentTarget.setPointerCapture(e.pointerId);
+    // Don't capture the pointer yet: capturing on pointer-down makes the browser
+    // dispatch the later `click` to this container instead of the tapped mushroom
+    // card, so taps never navigate. Capture only once the gesture becomes a drag.
+    pointerIdRef.current = e.pointerId;
+    capturedRef.current = false;
   };
 
   const onMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!draggingRef.current || startX.current === null) return;
     dragOffRef.current = e.clientX - startX.current;
+    if (!capturedRef.current && Math.abs(dragOffRef.current) > 6 && pointerIdRef.current !== null) {
+      try { e.currentTarget.setPointerCapture(pointerIdRef.current); } catch { /* pointer already gone */ }
+      capturedRef.current = true;
+    }
     applyPositions(activeIdxRef.current, dragOffRef.current, false);
   };
 
   const onUp = () => {
     if (!draggingRef.current) return;
     draggingRef.current = false;
+    capturedRef.current = false;
+    pointerIdRef.current = null;
     if (containerRef.current) containerRef.current.style.cursor = "default";
     const raw = dragOffRef.current;
     const ai  = activeIdxRef.current;
