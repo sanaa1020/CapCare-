@@ -162,3 +162,6 @@ Safe to delete if you don't want it.
   "OCR" mode is unchanged (still a UI mock, since no OCR engine was requested/available).
 - A PWA manifest + home-screen icons were added (drawn from the app's own mushroom mark)
   so the app can be "installed" to a phone's home screen.
+
+## Team
+- [@sanaa1020](https://github.com/sanaa1020)
