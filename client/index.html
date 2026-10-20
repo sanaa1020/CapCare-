@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>CapCare+</title>
+    <meta name="description" content="CapCare+: your pocket-sized allergen ally. Scan barcodes, track symptoms, and spot patterns between diet and health." />
+    <meta name="theme-color" content="#c0392b" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="CapCare+" />
+    <style>
+      /* Static pre-boot loading screen: paints instantly (no JS/React needed),
+         so reopening the app never shows a blank flash while the bundle loads.
+         Colours mirror SplashScreen.tsx; main.tsx fades this out once React has mounted. */
+      #preloader {
+        position: fixed; inset: 0; z-index: 9999;
+        background-color: #c0392b;
+        display: flex; align-items: center; justify-content: center;
+        transition: opacity 0.3s ease;
+      }
+      #preloader svg { width: 96px; height: 96px; }
+      #preloader-word {
+        position: absolute; bottom: 22%;
+        font-family: 'Fredoka One', Verdana, Arial, sans-serif;
+        font-style: normal;
+        font-weight: 700;
+        font-size: 1.6rem; color: #fff; letter-spacing: 0.02em;
+        text-shadow: 2px 2px 0 rgba(100,10,10,0.16);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="preloader">
+      <svg viewBox="0 0 160 170" fill="none">
+        <path d="M58 112 C56 132 53 150 53 160 Q53 167 80 167 Q107 167 107 160 C107 150 104 132 102 112 Z"
+          fill="#f2e8d6" stroke="#c9aa7c" stroke-width="2.5"/>
+        <ellipse cx="80" cy="110" rx="46" ry="8" fill="rgba(0,0,0,0.07)"/>
+        <path d="M26 106 Q24 72 50 52 Q63 42 80 40 Q97 42 110 52 Q136 72 134 106 Q107 116 80 117 Q53 116 26 106Z"
+          fill="#c0392b" stroke="#8b1a1a" stroke-width="2.5"/>
+        <ellipse cx="80"  cy="64" rx="12.5" ry="11.5" fill="white" opacity="0.93"/>
+        <ellipse cx="53"  cy="79" rx="8.5"  ry="8"    fill="white" opacity="0.88"/>
+        <ellipse cx="108" cy="77" rx="8.5"  ry="8"    fill="white" opacity="0.88"/>
+        <ellipse cx="67" cy="140" rx="5.5" ry="6" fill="#2a1a0a"/>
+        <ellipse cx="93" cy="140" rx="5.5" ry="6" fill="#2a1a0a"/>
+        <path d="M71 152 Q80 159 89 152" stroke="#2a1a0a" stroke-width="2" fill="none" stroke-linecap="round"/>
+      </svg>
+      <div id="preloader-word">CapCare+</div>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

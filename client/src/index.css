@@ -1,0 +1,153 @@
+@import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=Montserrat:wght@500;600;700&family=Outfit:wght@300;400;500&family=Abril+Fatface&display=swap');
+@import 'tailwindcss';
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/*
+  Single unified cap animation:
+  - 0→42%  : expand (ease-in burst) + fast rotateY spin
+  - 42→100%: contract + land (spring overshoot) + decelerating spin
+  transform-box: fill-box + transform-origin: center keeps the cap rotating around its own center
+*/
+@keyframes capFullSequence {
+  0% {
+    transform: perspective(400px) scale(1) rotateY(0deg) translateY(0px);
+    opacity: 1;
+    animation-timing-function: cubic-bezier(0.55, 0, 0.85, 0.35);
+  }
+  42% {
+    /* peak flood: same color as bg, opacity dips to create wash feel */
+    transform: perspective(400px) scale(7.5) rotateY(-600deg) translateY(0px);
+    opacity: 0.82;
+    animation-timing-function: cubic-bezier(0.25, 1.4, 0.55, 1);
+  }
+  64% {
+    /* descending, spin decelerating, opacity recovering */
+    transform: perspective(400px) scale(1.6) rotateY(-880deg) translateY(-28px);
+    opacity: 0.9;
+    animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  82% {
+    transform: perspective(400px) scale(0.92) rotateY(-1040deg) translateY(6px);
+    opacity: 0.97;
+  }
+  92% {
+    transform: perspective(400px) scale(1.05) rotateY(-1064deg) translateY(-3px);
+    opacity: 1;
+  }
+  100% {
+    transform: perspective(400px) scale(1) rotateY(-1080deg) translateY(0px);
+    opacity: 1;
+  }
+}
+
+
+@keyframes glowPulse {
+  0%, 100% { filter: drop-shadow(0 0 8px rgba(192, 57, 43, 0.4)); }
+  50%       { filter: drop-shadow(0 0 20px rgba(192, 57, 43, 0.7)); }
+}
+
+/* Plus sign: longer, breathier drop with full spring bounce */
+@keyframes plusDrop {
+  0%   { transform: translateY(-180px) scale(0.5); opacity: 0; }
+  45%  { transform: translateY(0px)    scale(1.22); opacity: 1; }
+  62%  { transform: translateY(-8px)   scale(0.94); }
+  76%  { transform: translateY(4px)    scale(1.06); }
+  88%  { transform: translateY(-3px)   scale(0.99); }
+  100% { transform: translateY(0px)    scale(1);    opacity: 1; }
+}
+
+/* Auth screen entrance */
+@keyframes slideUp {
+  from { transform: translateY(28px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+/* Looping arrow nudge: onboarding swipe hint */
+@keyframes nudgeLeft {
+  0%, 100% { transform: translateX(0); }
+  30%      { transform: translateX(-8px); }
+  62%      { transform: translateX(-3px); }
+}
+@keyframes nudgeRight {
+  0%, 100% { transform: translateX(0); }
+  30%      { transform: translateX(8px); }
+  62%      { transform: translateX(3px); }
+}
+
+/* One-time swipe gesture demo: slide left → center → right → fade */
+@keyframes swipeDemo {
+  0%   { opacity: 0;    transform: translateX(0); }
+  10%  { opacity: 0.82; transform: translateX(0); }
+  38%  { opacity: 0.82; transform: translateX(-44px); }
+  55%  { opacity: 0.82; transform: translateX(0); }
+  80%  { opacity: 0.82; transform: translateX(44px); }
+  92%  { opacity: 0.82; transform: translateX(44px); }
+  100% { opacity: 0;    transform: translateX(44px); }
+}
+
+/* Scan arrow draw animation */
+@keyframes arrowDraw {
+  from { stroke-dashoffset: 160; }
+  to   { stroke-dashoffset: 0;   }
+}
+
+/* Symptom logging animation */
+@keyframes fadeInOut {
+  0%   { opacity: 0; transform: translateY(10px) scale(0.9); }
+  15%  { opacity: 1; transform: translateY(0) scale(1); }
+  75%  { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-16px) scale(0.95); }
+}
+@keyframes nodeAppear {
+  from { opacity: 0; transform: scale(0.5); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* Jolly hop: whole mushroom lifts then settles with secondary bounce */
+@keyframes joyHop {
+  0%   { transform: translateY(0px);  }
+  26%  { transform: translateY(-24px); }
+  50%  { transform: translateY(5px);  }
+  66%  { transform: translateY(-10px); }
+  80%  { transform: translateY(3px);  }
+  91%  { transform: translateY(-3px); }
+  100% { transform: translateY(0px);  }
+}
+
+/* ── Splash CSS-only animation keyframes (zero React re-renders) ─────────── */
+@keyframes splashCreamIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+/* Reveal wordmark container instantly at delay time */
+@keyframes splashReveal {
+  to { opacity: 1; }
+}
+/* C letters slide in from sides */
+@keyframes splashCSlideLeft {
+  from { transform: translateX(-190px); }
+  to   { transform: translateX(0); }
+}
+@keyframes splashCSlideRight {
+  from { transform: translateX(190px); }
+  to   { transform: translateX(0); }
+}
+/* Inner letters pop up from scale 0.4 */
+@keyframes splashLetterPop {
+  from { opacity: 0; transform: scale(0.4) translateY(10px); }
+  to   { opacity: 1; transform: scale(1)   translateY(0); }
+}
+/* Mushroom pop for allergy scanner characters */
+@keyframes mushPop {
+  0%   { opacity: 0; transform: scale(0.2) translateY(18px); }
+  60%  { transform: scale(1.18) translateY(-4px); }
+  80%  { transform: scale(0.94) translateY(2px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}

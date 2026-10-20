@@ -1,0 +1,13 @@
+{
+  "name": "capcare-plus",
+  "private": true,
+  "version": "1.0.0",
+  "description": "CapCare+ — full-stack allergy & symptom tracker with real barcode/Open Food Facts scanning",
+  "scripts": {
+    "install:all": "npm install --prefix server && npm install --prefix client",
+    "dev": "node server/dev-runner.js",
+    "build": "npm run build --prefix client",
+    "start": "npm run build --prefix client && npm start --prefix server",
+    "start:server-only": "npm start --prefix server"
+  }
+}
